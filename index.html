@@ -207,6 +207,8 @@ const HAB_ATR = {atletismo:"vigor",pelea:"vigor",esquiva:"destreza",latrocinio:"
   adivinacion:"inteligencia",arcanismo:"inteligencia",callejeo:"inteligencia",cultura_magica:"inteligencia",cultura_muggle:"inteligencia",
   herbologia:"inteligencia",magizoologia:"inteligencia",medicina:"inteligencia",politica:"inteligencia",supervivencia:"inteligencia",
   duelo:"poder",pociones:"poder",rituales:"poder"};
+const COMBATE_KEYS = {iniciativa:"iniciativa",ataque_fisico:"ataque_fisico",ataque_magico:"ataque_magico",defensa:"defensa",pas:"pas",pa:"pas",
+  umbral_de_heridas:"umbral_de_heridas",umbral_heridas:"umbral_de_heridas",heridas:"heridas",lucha_fisica:"lucha_fisica",lucha_magica:"lucha_magica"};
 const NIVEL_POR_BONO = {0:"Desentrenado",1:"Novato",2:"Competente",4:"Experto",7:"Maestro",9:"Legendario"};
 const titulo = s => s.toLowerCase().replace(/(^|[\s(\/-])(\S)/g, (m, a, b) => a + b.toUpperCase());
 const LISTAS = ["quidditch","hechizos","pociones","rituales","objetos","armas","trasfondos","ventajas","talentos","idiomas","especializaciones","titulos","proezas","raza"];
@@ -606,6 +608,17 @@ function parsear(entrada){
     const clave = i > 0 ? cuerpo.slice(0, i).trim() : sinPunto(cuerpo);
     const valor = i > 0 ? sinPunto(cuerpo.slice(i+1)) : "";
 
+    // combate y puntos se reconocen por nombre en cualquier parte de la ficha ("→ PAs: base 17 + ... = 26", "→ Puntos de Pociones: ... =13")
+    const ck = slug(clave);
+    const pm = ck.match(/^(perdida_de_)?puntos_de_(pociones|rituales|destino)$/);
+    if(pm){ f.puntos[pm[1] ? "perdida_destino" : pm[2]] = numeroFinal(valor); continue; }
+    if(ck in COMBATE_KEYS && (!sec || ["combate","habilidades","atributos","otros"].includes(sec)) && (/^\s*-?\d+/.test(valor) || /=\s*-?\d+/.test(valor)) && !parseNivel(valor, true)){
+      if(forma && !f._formaPrincipal) f._formaPrincipal = forma;
+      const destino = (!forma || forma === f._formaPrincipal) ? f.combate : (f.combate_formas[forma] ||= {});
+      destino[COMBATE_KEYS[ck]] = numeroFinal(valor);
+      continue;
+    }
+
     switch(sec || "otros"){
       case "atributos": {
         if(/^l[ií]mites?/i.test(clave)){ f.limites = valor; break; }
@@ -690,7 +703,7 @@ function parsear(entrada){
       if(real !== n) x._avisos.push(`${cap(s)} ${sb}: el encabezado dice ${n} y se leyeron ${real}.`);
     }
   }
-  return fichas.filter(x => x.personaje || Object.keys(x.atributos).length || Object.keys(x.bonos).length);
+  return fichas.filter(x => x.personaje || Object.keys(x.atributos).length || Object.keys(x.bonos).length || Object.keys(x.combate).length || Object.keys(x.puntos).length);
 }
 
 /* ---------- salida ---------- */
