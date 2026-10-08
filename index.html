@@ -84,9 +84,11 @@ button[disabled]{opacity:.55;cursor:wait}
   <header>
     <div>
       <h1>Lector de <span>Fichas</span></h1>
-      <p class="sub">Pegá la ficha tal como está en el foro (texto copiado). Sale en JSON o como código corto para cargar en otras herramientas. También podés pegar un código <code>AVK1.</code> para volver a ver la ficha.</p>
+      <p class="sub">Pegá la ficha como la tengas: el texto copiado del foro, el código del post (BBCode y HTML) o la página del tema guardada (.htm). Sale en JSON o como código corto para cargar en otras herramientas. También podés pegar un código <code>AVK1.</code> para volver a ver la ficha.</p>
     </div>
     <div class="btns">
+      <button id="btn-archivo" type="button">Subir archivo</button>
+      <input id="archivo" type="file" accept=".htm,.html,.txt" hidden>
       <button id="btn-limpiar" type="button">Vaciar</button>
       <button id="btn-ejemplo" type="button">Cargar ejemplo</button>
     </div>
@@ -94,7 +96,7 @@ button[disabled]{opacity:.55;cursor:wait}
 
   <div class="grid">
     <section class="panel" aria-label="Ficha en texto">
-      <div class="ph"><h2>Ficha (texto o código)</h2>
+      <div class="ph"><h2>Ficha (texto, código del post o página)</h2>
       </div>
       <textarea id="entrada" spellcheck="false" placeholder="IRVIN GILES&#10;{Atributos»&#10;→ Vigor: 4&#10;..."></textarea>
       <div class="status" id="status"></div>
@@ -123,9 +125,9 @@ button[disabled]{opacity:.55;cursor:wait}
   <div class="how">
     <h2>Cómo usarlo en otras herramientas</h2>
     <ol>
-      <li>Pegá la ficha a la izquierda; el resultado se arma solo. Revisá los avisos (niveles mal sumados, listas incompletas).</li>
+      <li>Pegá la ficha a la izquierda o subí la página del tema guardada desde el navegador (Ctrl+S). Si el tema tiene respuestas de otros usuarios o el registro de canjes, se ignoran. Revisá los avisos (niveles mal sumados, listas incompletas).</li>
       <li><b>JSON</b> es legible y sirve para revisar. <b>Código</b> es la misma ficha comprimida (empieza con <code>AVK1.</code>): es lo que se pega en el tracker o en la calculadora.</li>
-      <li>“Descripciones” agrega los textos largos (trasfondos, talentos, objetos). Sin ellas el código queda mucho más corto.</li>
+      <li>“Descripciones” agrega los textos largos (historia, descripciones, trasfondos, talentos, objetos). Sin ellas el código queda mucho más corto.</li>
     </ol>
   </div>
 </div>
@@ -187,25 +189,44 @@ PODER:
 
 /* ---------- utilidades ---------- */
 const ATRIBUTOS = ["vigor","destreza","carisma","voluntad","percepcion","inteligencia","poder"];
+const HABILIDADES = new Set(["atletismo","pelea","esquiva","latrocinio","sigilo","vuelo","coordinacion","intimidacion","oratoria","seduccion","subterfugio","estilo","frialdad","alerta","consciencia","empatia","iniciativa","investigacion","adivinacion","arcanismo","callejeo","cultura_magica","cultura_muggle","herbologia","magizoologia","medicina","politica","supervivencia","duelo","pociones","rituales"]);
 const NIVELES = {desentrenado:0, novato:1, competente:2, experto:4, maestro:7, legendario:9};
 const ROMANOS = {I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8};
 const $ = id => document.getElementById(id);
-const sinTildes = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+const sinTildes = s => s.normalize("NFD").replace(/[̀-ͯ]/g,"");
 const norm = s => sinTildes(s).toLowerCase().replace(/\s+/g," ").trim();
 const slug = s => norm(s).replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-const sinPunto = s => s.replace(/[\s.,;]+$/,"").trim();
-const BULLET = /^(?:→|->|=>|•|●|◦|\*|-(?=\s))\s*/;
-const quitarBB = s => s.replace(/\[\/?[a-z]+(?:=[^\]]*)?\]/gi,"");
+const sinPunto = s => s.replace(/[\s.,;*]+$/,"").trim();
+const BULLET = /^(?:→|->|=>|•|●|◦|✦|✧|❖|◆|\*(?=\s)|-(?=\s))\s*/;
 const esMayus = l => /[A-ZÁÉÍÓÚÑ]/.test(l) && l === l.toUpperCase();
+const VACIOS = /^(-|—|no|ninguno|ninguna|no tiene|n\/a|nada)$/i;
+const HAB_ATR = {atletismo:"vigor",pelea:"vigor",esquiva:"destreza",latrocinio:"destreza",sigilo:"destreza",vuelo:"destreza",
+  coordinacion:"carisma",intimidacion:"carisma",oratoria:"carisma",seduccion:"carisma",subterfugio:"carisma",estilo:"voluntad",frialdad:"voluntad",
+  alerta:"percepcion",consciencia:"percepcion",empatia:"percepcion",iniciativa:"percepcion",investigacion:"percepcion",
+  adivinacion:"inteligencia",arcanismo:"inteligencia",callejeo:"inteligencia",cultura_magica:"inteligencia",cultura_muggle:"inteligencia",
+  herbologia:"inteligencia",magizoologia:"inteligencia",medicina:"inteligencia",politica:"inteligencia",supervivencia:"inteligencia",
+  duelo:"poder",pociones:"poder",rituales:"poder"};
+const NIVEL_POR_BONO = {0:"Desentrenado",1:"Novato",2:"Competente",4:"Experto",7:"Maestro",9:"Legendario"};
+const titulo = s => s.toLowerCase().replace(/(^|[\s(\/-])(\S)/g, (m, a, b) => a + b.toUpperCase());
+const LISTAS = ["quidditch","hechizos","pociones","rituales","objetos","armas","trasfondos","ventajas","talentos","idiomas","especializaciones","titulos","proezas","raza"];
+const CONOCIMIENTOS = ["hechizos","pociones","rituales","objetos","armas","quidditch"];
+
+const DATOS = {"nombre y apellido":"nombre","nombre y apellidos":"nombre","avatar/pb":"avatar","avatar":"avatar","pb":"avatar",
+  "multicuenta":"multicuenta","multicuentas":"multicuenta","lugar de nacimiento":"lugar_nacimiento","lugar de residencia":"residencia",
+  "clase social":"clase_social","fecha de nacimiento":"fecha_nacimiento","edad":"edad","etapa":"etapa","orientacion sexual":"orientacion",
+  "tipo de sangre":"sangre","casa":"casa","curso":"curso","faccion":"faccion","equipo de quidditch":"quidditch","mascota":"mascota",
+  "punto fuerte":"punto_fuerte","punto debil":"punto_debil","gustos/aficiones":"gustos","fobias/manias":"fobias","empleo":"empleo"};
+const TEXTOS = {"descripcion fisica":"descripcion_fisica","descripcion psicologica":"descripcion_psicologica","historia":"historia","familia":"familia"};
 
 const SECCIONES = [
   [/^atributos?\b/, "atributos"], [/^habilidades?\b/, "habilidades"],
   [/^(acceso rapido|combate)\b/, "combate"],
   [/^(perdida de )?puntos de (pociones|rituales|destino)/, "puntos"],
   [/^hechizos?\b/, "hechizos"], [/^pociones\b/, "pociones"], [/^rituales\b/, "rituales"],
-  [/^objetos?\b/, "objetos"], [/^(los )?trasfondos?\b/, "trasfondos"], [/^ventajas\b/, "ventajas"],
-  [/^raza\b/, "raza"], [/^idiomas?\b/, "idiomas"], [/^especializacion(es)?\b/, "especializaciones"],
+  [/^objetos?\b/, "objetos"], [/^armas?\b/, "armas"], [/^quidditch$/, "quidditch"],
+  [/^(los )?trasfondos?\b/, "trasfondos"], [/^(bibliotecas?|informantes|influencias?|seguidores)$/, "trasfondos"],
+  [/^ventajas\b/, "ventajas"], [/^raza\b/, "raza"], [/^idiomas?\b/, "idiomas"], [/^especializacion(es)?\b/, "especializaciones"],
   [/^talentos\b/, "talentos"], [/^titulos?\b/, "titulos"], [/^proezas\b/, "proezas"], [/^otros\b/, "otros"]
 ];
 function cabecera(texto){
@@ -213,265 +234,468 @@ function cabecera(texto){
   for(const [re, sec] of SECCIONES) if(re.test(cabeza)) return {sec, cabeza};
   return null;
 }
+// un encabezado sin ▋ tiene que parecer encabezado: corto y con dos puntos, en mayúsculas o de pocas palabras
+function cabeceraLinea(l, marcada){
+  const c = cabecera(l);
+  if(!c) return null;
+  if(marcada || c.sec === "puntos") return c;
+  if(c.sec === "otros" || l.length > 60) return null;
+  const head = l.split(/[:(|]/)[0].trim();
+  const despues = l.includes(":") ? l.slice(l.indexOf(":")+1).trim() : "";
+  if(despues && !/^[(→|]/.test(despues) && !/^(atributos|habilidades|combate|hechizos|pociones|rituales|objetos|armas|trasfondos|ventajas|raza|idiomas|especializaciones|talentos|titulos( academicos)?|proezas)$/.test(c.cabeza)) return null;
+  if(/:\s*$/.test(l) || esMayus(head) || (head.split(/\s+/).length <= 4 && !/[.,;]/.test(head))) return c;
+  return null;
+}
 function subcategoria(sec, cabeza){
-  if(sec === "idiomas") return /muggle/.test(cabeza) ? "muggles" : /magic/.test(cabeza) ? "magicos" : "otros";
   if(/domestic/.test(cabeza)) return "domesticos";
   if(/basic/.test(cabeza)) return "basicos";
   if(/intermedi/.test(cabeza)) return "intermedios";
   if(/avanzad/.test(cabeza)) return "avanzados";
+  if(/especial/.test(cabeza)) return "especiales";
   if(/cumplea/.test(cabeza)) return "cumpleanos";
+  if(sec === "talentos") return slug(cabeza.replace(/^talentos?\s*/, "")) || null;
+  if(sec === "idiomas") return /muggle/.test(cabeza) ? "muggle" : /magic/.test(cabeza) ? "magico" : null;
   return null;
 }
-
-function parseNivel(v){
-  v = sinPunto(v);
-  const m = v.match(/^([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s*\(?\s*([+-]?\d+)?\s*\)?$/);
+const esNombre = l => {
+  if(!esMayus(l) || /[:\d|—]/.test(l)) return false;
+  const p = l.trim().split(/\s+/);
+  return p.length >= 2 && p.length <= 5 && p.every(w => /^[A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ'.-]+$/.test(w));
+};
+function numeroFinal(v){
+  v = (v || "").trim();
+  if(/^-?\d+\s*(=|$)/.test(v)) return parseInt(v,10);
+  if(v.includes("=")){ const m = v.split("=").pop().match(/-?\d+/); if(m) return parseInt(m[0],10); }
+  const m = v.match(/-?\d+/); return m ? parseInt(m[0],10) : null;
+}
+function parseNivel(v, flexible){
+  v = sinPunto(v).replace(/^[\s.:;,]+/, "");
+  const m = flexible ? v.match(/^([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s*(?:\(\s*([+-]?\d+)\s*\))?/) : v.match(/^([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s*\(?\s*([+-]?\d+)?\s*\)?$/);
   if(!m) return null;
   const n = slug(m[1]);
-  if(!(n in NIVELES)) return null;
-  return {nivel: cap(m[1]), bono: m[2] !== undefined ? parseInt(m[2],10) : NIVELES[n], esperado: NIVELES[n]};
+  const bono = m[2] !== undefined ? parseInt(m[2],10) : null;
+  if(!(n in NIVELES)){
+    // nivel mal escrito ("Competnte (+2)"): se toma el del bono
+    if(flexible && bono != null && NIVEL_POR_BONO[bono] && n.length > 3) return {nivel: NIVEL_POR_BONO[bono], bono, esperado: bono};
+    return null;
+  }
+  return {nivel: cap(m[1]), bono: bono ?? NIVELES[n], esperado: NIVELES[n]};
 }
 
-/* hechizo, poción, ritual u objeto: "Nombre | Latín. Requiere X." o "Nombre: descripción" */
+/* ---------- de HTML / BBCode a líneas de texto ---------- */
+const BLOQUES = new Set(["ADDRESS","ARTICLE","ASIDE","BLOCKQUOTE","CENTER","DD","DETAILS","DIV","DL","DT","FIELDSET","FIGURE","FOOTER","FORM","H1","H2","H3","H4","H5","H6","HEADER","HR","LI","MAIN","NAV","OL","P","PRE","SECTION","SUMMARY","TABLE","TBODY","TD","TH","THEAD","TR","UL","LABEL"]);
+const SALTAR = new Set(["SCRIPT","STYLE","LINK","META","NOSCRIPT","INPUT","IMG","SVG","BUTTON","SELECT","TEXTAREA","HEAD","TITLE","IFRAME"]);
+const pareceHTML = t => /<\/?(div|span|br|p|details|summary|font|center|table|dl|dt|html|body|strong|label|a)\b[^>]*>/i.test(t);
+function htmlATexto(html){
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  let raices = [doc.body], autor = null;
+  const posts = [...doc.querySelectorAll(".postbody")];
+  if(posts.length){
+    const quien = p => (p.querySelector(".author strong, .author a")?.textContent || "").trim();
+    autor = quien(posts[0]) || null;
+    raices = posts.filter(p => !autor || quien(p) === autor).map(p => p.querySelector(".content") || p);
+  }
+  let out = "";
+  const walk = n => {
+    if(n.nodeType === 3){ out += n.nodeValue; return; }
+    if(n.nodeType !== 1 || SALTAR.has(n.tagName)) return;
+    if(n.tagName === "BR"){ out += "\n"; return; }
+    const bloque = BLOQUES.has(n.tagName);
+    if(bloque) out += "\n";
+    for(const c of n.childNodes) walk(c);
+    if((n.tagName === "SUMMARY" || n.tagName === "DT") && !/:\s*$/.test(out)) out += ":";
+    if(bloque) out += "\n";
+  };
+  raices.forEach(r => { walk(r); out += "\n"; });
+  return {texto: out, autor};
+}
+function limpiarBB(t){
+  return t
+    .replace(/\[img[^\]]*\][\s\S]*?\[\/img\]/gi, "")
+    .replace(/\[spoiler=([^\]]+)\]/gi, (m, x) => "\n" + x.trim().replace(/:?$/, ":") + "\n")
+    .replace(/\[\/spoiler\]/gi, "\n")
+    .replace(/\[\/?[a-z]+(?:=[^\]]*)?\]/gi, "")
+    .replace(/ /g, " ")
+    .replace(/[ \t]+(?=→)/g, "\n");
+}
+
+/* ---------- lectores de cada tipo de dato ---------- */
+// hechizo, poción, ritual u objeto: "Nombre | Latín. Requiere X. Arcano de Y. descripción" o "Nombre: descripción"
 function parseConocimiento(b){
   b = sinPunto(b);
   const o = {};
-  const d = b.match(/^([^:.]{1,60}):\s+([\s\S]{15,})$/);
-  if(d){ o.nombre = d[1].trim(); o.descripcion = d[2].trim(); }
-  else {
-    const partes = b.split(/\.\s*Requiere\s+/i);
-    o.nombre = sinPunto(partes[0]);
-    if(partes[1]) o.requiere = sinPunto(partes[1]);
-  }
+  let resto = "";
+  const d = b.match(/^([^:]{1,70}?):\s*([\s\S]*)$/);
+  if(d && !/\.\s/.test(d[1])){ o.nombre = d[1].trim(); resto = d[2].trim(); }
+  else { const i = b.search(/\.\s/); o.nombre = i > 0 ? b.slice(0, i).trim() : b; resto = i > 0 ? b.slice(i+1).trim() : ""; }
   if(o.nombre.includes("|")){ const [a, l] = o.nombre.split("|"); o.nombre = a.trim(); o.latin = l.trim(); }
+  const rq = resto.match(/\bRequiere\s+([^.)]+)/);
+  if(rq) o.requiere = sinPunto(rq[1]);
+  const tipos = [...resto.matchAll(/Arcano de ([A-Za-zÁÉÍÓÚáéíóúñÑ]+)/gi)].map(m => cap(m[1]));
+  if(/\bContrahechizo\b/i.test(resto)) tipos.push("Contrahechizo");
+  if(tipos.length) o.tipo = [...new Set(tipos)];
+  const desc = resto.replace(/\(?\bRequiere\s+[^.)]+[.)]?\s*/, "").replace(/Arcano de [A-Za-zÁÉÍÓÚáéíóúñÑ]+\.?\s*/gi, "").replace(/^[\s.]+/, "").trim();
+  if(desc) o.descripcion = desc;
   return o;
 }
-
 function parseTalento(b){
   b = sinPunto(b);
   const x = b.match(/^(.+?)\s*\(\s*x\s*(\d+)\s*\)$/i);
   if(x) return {nombre: x[1].trim(), cantidad: parseInt(x[2],10)};
-  const i = b.indexOf(":");
-  if(i <= 0 || i > 50) return {nombre: b};
-  const o = {nombre: b.slice(0,i).trim()};
-  let resto = b.slice(i+1).trim();
-  const primera = resto.split(/\.\s+/)[0];
-  if(/^requiere\s/i.test(primera)){ o.requiere = sinPunto(primera.replace(/^requiere\s+/i,"")); resto = resto.slice(primera.length).replace(/^\.\s*/,""); }
-  else if(primera.length <= 30){ o.detalle = sinPunto(primera); resto = resto.slice(primera.length).replace(/^\.\s*/,""); }
+  const par = b.match(/^([^:(]{1,50}?)\s*\(([^)]{1,40})\)\s*:?\s*([\s\S]*)$/);
+  if(par && !/^\s*(requiere|x\s*\d)/i.test(par[2])){
+    const o = {nombre: par[1].trim(), detalle: par[2].trim()};
+    if(par[3].trim()) o.descripcion = par[3].trim();
+    return o;
+  }
+  const i = b.indexOf(":"), p = b.indexOf("(");
+  let nombre, resto;
+  if(i > 0 && i <= 50 && (p < 0 || i < p)){ nombre = b.slice(0,i).trim(); resto = b.slice(i+1).trim(); }
+  else if(p > 0 && p <= 50){ nombre = b.slice(0,p).trim(); resto = b.slice(p).trim(); }
+  else return {nombre: b};
+  const o = {nombre};
+  if(nombre.includes("|")){ const [a, d] = nombre.split("|"); o.nombre = a.trim(); o.detalle = d.trim(); }
+  const rq = resto.match(/^\(\s*requiere\s+([^)]*)\)\.?\s*/i) || resto.match(/^requiere\s+([^.]+)\.\s*/i);
+  if(rq){ o.requiere = sinPunto(rq[1]); resto = resto.slice(rq[0].length).trim(); }
+  const primera = resto.split(/\s+—\s+|\.\s+|;\s+/)[0];
+  if(!o.detalle && primera && primera.length <= 30){ o.detalle = sinPunto(primera); resto = resto.slice(primera.length).replace(/^\s*(—|\.|;)\s*/, "").trim(); }
   if(resto) o.descripcion = resto;
   return o;
 }
-
 const pareceCategoria = s => {
   const p = s.trim().split(/\s+/);
-  return p.length <= 9 && p.filter(w => w.length > 3).every(w => /^[A-ZÁÉÍÓÚÑ>\/]/.test(w));
+  return p.length <= 9 && p.filter(w => w.length > 3).every(w => /^[A-ZÁÉÍÓÚÑ>\/(&]/.test(w));
 };
 function parseTrasfondo(b, grupo){
-  const m = b.match(/^(Biblioteca|Influencia|Informantes|Seguidores)\s+([IVX]+)\b\s*(?:\(([^)]+)\))?\s*[:.]?\s*([\s\S]*)$/i);
-  if(!m) return {grupo, texto: sinPunto(b)};
-  let [, tipo, rom, identidad, resto] = m, categoria = null;
-  const c = resto.match(/^([^.,:]{1,70}?)\s*(?:\(([^)]+)\))?\s*\.\s*([\s\S]*)$/);
-  if(c && c[1].trim() && pareceCategoria(c[1])){ categoria = c[1].trim(); identidad = identidad || c[2]; resto = c[3]; }
-  const o = {tipo: cap(tipo), nivel: ROMANOS[rom.toUpperCase()] ?? rom};
-  if(/^biblioteca$/i.test(tipo)){
-    const [g, e] = (categoria || "").split(">").map(s => s.trim());
-    o.general = g || null; if(e) o.especifica = e;
-  } else {
-    o.general = grupo || null;
-    if(categoria){ const [g, e] = categoria.split(">").map(s => s.trim()); if(e){ o.general = g; o.especifica = e; } else o.especifica = g; }
+  b = b.trim().replace(/(\s[IVX]{1,4})\.(?=[A-ZÁÉÍÓÚ])/g, "$1. ");
+  const m = b.match(/^(Bibliotecas?|Influencias?|Inform\w*|Seguidores)\b\s*[—:-]?\s*([\s\S]*)$/i);
+  if(!m) return {general: grupo || null, texto: sinPunto(b)};
+  const tipo = /^bibl/i.test(m[1]) ? "Biblioteca" : /^infl/i.test(m[1]) ? "Influencia" : /^inform/i.test(m[1]) ? "Informantes" : "Seguidores";
+  const o = {tipo, nivel: null};
+  let resto = m[2], identidad = null;
+  // cabeza: hasta los primeros dos puntos o el primer punto seguido
+  const corte = [resto.indexOf(":"), resto.search(/\.\s/)].filter(x => x >= 0);
+  const ci = corte.length ? Math.min(...corte) : -1;
+  let pre = ci >= 0 ? resto.slice(0, ci) : resto;
+  let post = ci >= 0 ? resto.slice(ci+1).trim() : "";
+  const idm = pre.match(/\(([^)]+)\)/);
+  if(idm){ identidad = idm[1].trim(); pre = pre.replace(idm[0], " "); }
+  const rm = pre.match(/(?:^|[\s—>-])([IVX]{1,4})(?=[\s.—]*$)/) || pre.match(/(?:^|[\s—>-])([IVX]{1,4})(?=[\s.]|$)/);
+  if(rm){ o.nivel = ROMANOS[rm[1]] ?? null; pre = pre.slice(0, rm.index) + pre.slice(rm.index + rm[0].length); }
+  pre = pre.replace(/^[\s—:>.-]+|[\s—:>.-]+$/g, "").trim();
+  if(o.nivel == null){ const pm = post.match(/^([IVX]{1,4})\b\.?\s*([\s\S]*)$/); if(pm){ o.nivel = ROMANOS[pm[1]]; post = pm[2].trim(); } }
+  let categoria = pre || null, descripcion = "";
+  if(post){
+    if(categoria){
+      // "Cultura Muggle II: Arte Muggle (Musica)" → la parte de después es la específica
+      const p2 = sinPunto(post);
+      if(!/[.,;:]/.test(p2) && p2.length <= 60 && pareceCategoria(p2)) categoria += " > " + p2;
+      else descripcion = post;
+    } else {
+      const c = post.match(/^([^.,:]{1,70}?)\s*(?:\(([^)]+)\))?\s*\.\s*([\s\S]*)$/);
+      if(c && c[1].trim() && pareceCategoria(c[1])){ categoria = c[1].trim(); identidad = identidad || c[2] || null; descripcion = c[3]; }
+      else descripcion = post;
+    }
   }
+  const partes = categoria ? categoria.split(/\s*(?:—|>|\s-\s)\s*/).map(s => s.trim()).filter(Boolean) : [];
+  if(tipo === "Biblioteca" || partes.length > 1 || !grupo){ o.general = partes[0] || grupo || null; if(partes.length > 1) o.especifica = partes.slice(1).join(" > "); }
+  else { o.general = grupo; if(partes[0] && norm(partes[0]) !== norm(grupo)) o.especifica = partes[0]; }
   if(identidad) o.identidad = identidad.trim();
-  if(resto.trim()) o.descripcion = resto.trim();
+  if(descripcion.trim()) o.descripcion = descripcion.trim();
   return o;
 }
 function parseVentaja(b){
-  const m = b.match(/^(Fama|Orden de Merl[ií]n|Patr[oó]n|Recursos)[\s,]+([^:]+?)\s*:\s*([\s\S]*)$/i);
+  b = b.trim();
+  const m = b.match(/^(Fama|Orden de Merl[ií]n|Patr[oó]n|Recursos)[\s,]+([IVX]{1,4}|\d+ª?\s*Clase|\d+)\b\.?\s*:?\s*([\s\S]*)$/i) || b.match(/^(Fama|Orden de Merl[ií]n|Patr[oó]n|Recursos)[\s,]+([^:]+?)\s*(?::\s*([\s\S]*))?$/i);
   if(!m){ const i = b.indexOf(":"); return {nombre: sinPunto(i > 0 ? b.slice(0,i) : b)}; }
-  const niv = m[2].trim();
+  const niv = sinPunto(m[2]);
   const o = {nombre: m[1], nivel: ROMANOS[niv.toUpperCase()] ?? niv};
-  if(m[3].trim()) o.descripcion = m[3].trim();
+  if(m[3] && m[3].trim()) o.descripcion = m[3].trim();
   return o;
 }
-function parseIdioma(b){
-  const i = b.indexOf(":");
-  const o = {idioma: (i > 0 ? b.slice(0,i) : b).trim()};
-  if(i > 0){
-    const resto = b.slice(i+1).trim();
-    const n = resto.match(/^nivel\s+([^.]+)\.?\s*([\s\S]*)$/i);
-    if(n){ o.nivel = n[1].trim(); if(n[2]) o.descripcion = n[2].trim(); }
-    else o.descripcion = resto;
+function parseIdioma(b, tipo){
+  b = sinPunto(b);
+  const i = b.indexOf(":"), g = b.indexOf("—");
+  let idioma, resto = "";
+  const c = b.indexOf(",");
+  if(i > 0 && i <= 40 && (g < 0 || i < g)){ idioma = b.slice(0,i); resto = b.slice(i+1); }
+  else if(g > 0){ idioma = b.slice(0,g); resto = b.slice(g+1); }
+  else if(c > 0 && c <= 30){ idioma = b.slice(0,c); resto = b.slice(c+1); }
+  else idioma = b;
+  const o = {idioma: idioma.trim()};
+  if(tipo) o.tipo = tipo;
+  resto = resto.trim();
+  if(resto){
+    const n = resto.match(/^(?:nivel\s+)?(nativo|natal|alto|medio|bajo|b[aá]sico|avanzado|intermedio|fluido)\b\.?\s*([\s\S]*)$/i) || resto.match(/^(?:nivel\s+)?([^.]+?)(?:\.\s*([\s\S]*))?$/i);
+    if(n){ o.nivel = n[1].trim().toLowerCase(); if(n[2]) o.descripcion = n[2].trim(); }
   }
   return o;
 }
+const CALIF = /(Extraordinari[oa]s?|Supera las E[sx]pectativas|Aceptable|Insatisfactorio|Desastroso|Troll)/i;
 function parseTitulo(b){
   b = sinPunto(b);
-  const i = b.indexOf(":");
-  if(i < 0) return {examen: b};
-  const o = {examen: b.slice(0,i).trim()};
-  const resto = b.slice(i+1).trim(), p = resto.lastIndexOf(". ");
-  if(p > 0){ o.materia = resto.slice(0,p).trim(); o.calificacion = resto.slice(p+2).trim(); }
-  else o.calificacion = resto;
+  const bonito = s => esMayus(s) && s.length > 4 ? cap(s) : s;
+  const i = b.indexOf(":"), g = b.indexOf("—");
+  let izq = b, der = "";
+  if(i > 0 && (g < 0 || i < g)){ izq = b.slice(0,i); der = b.slice(i+1).trim(); }
+  else if(g > 0){ izq = b.slice(0,g); der = b.slice(g+1).trim(); }
+  izq = izq.trim();
+  const o = {};
+  const ex = izq.match(/^(TIMO'?s?|É?EXTASIS|ÉXTASIS|EXTASIS)\b[\s:]*(.*)$/i);
+  if(ex){ o.examen = ex[1]; if(ex[2].trim()) o.materia = ex[2].trim(); } else o.materia = izq;
+  const cm = der.match(CALIF);
+  if(cm){
+    const antes = sinPunto(der.slice(0, cm.index).trim());
+    if(antes && !o.materia) o.materia = antes;
+    o.calificacion = bonito(cm[0]);
+    const despues = der.slice(cm.index + cm[0].length).replace(/^[\s.]+/, "").trim();
+    if(despues) o.descripcion = despues;
+  } else if(der) o.calificacion = bonito(sinPunto(der.split(/\.\s/)[0]));
   return o;
+}
+function parseEspecializacion(b){
+  const i = b.indexOf(":");
+  const cabeza = sinPunto(i > 0 ? b.slice(0,i) : b);
+  const m = cabeza.match(/^(.+?)\s+(\d+|[IVX]{1,4})$/);
+  if(!m) return {clave: slug(cabeza), nivel: 1};
+  return {clave: slug(m[1]), nivel: /^\d+$/.test(m[2]) ? parseInt(m[2],10) : ROMANOS[m[2]]};
 }
 
 /* ---------- parser principal ---------- */
 function nuevaFicha(nombre){
-  return {personaje: nombre || "", raza: null, limites: null, atributos: {}, talentosos: [], habilidades: {}, bonos: {},
-    combate: {}, puntos: {}, especializaciones: {}, hechizos: {}, pociones: {}, rituales: {}, objetos: {},
-    talentos: {}, trasfondos: [], ventajas: [], idiomas: {}, titulos: [], proezas: [], extra: {}, _avisos: [], _esperados: {}};
+  return {personaje: nombre || "", datos: {}, raza: null, limites: null, atributos: {}, talentosos: [], habilidades: {}, bonos: {},
+    combate: {}, combate_formas: {}, puntos: {}, especializaciones: {}, hechizos: {}, pociones: {}, rituales: {}, objetos: {}, armas: [], quidditch: {},
+    talentos: {}, trasfondos: [], ventajas: [], idiomas: [], titulos: [], proezas: [], textos: {}, _avisos: [], _esperados: {}};
 }
 
-function parsear(texto){
-  const lineas = texto.replace(/\r/g,"").split("\n");
+function parsear(entrada){
+  let texto = entrada, autor = null;
+  if(pareceHTML(entrada) && typeof DOMParser !== "undefined"){ const r = htmlATexto(entrada); texto = r.texto; autor = r.autor; }
+  const lineas = limpiarBB(texto).split("\n");
   const fichas = [];
-  let f = null, sec = null, sub = null, grupo = null;
+  let f = null, sec = null, sub = null, grupo = null, arte = false, armaSub = null, ultimo = null, textoKey = null, ignorar = false, forma = null;
   const asegurar = () => { if(!f){ f = nuevaFicha(""); fichas.push(f); } };
   const lista = (obj, k) => (obj[k] ||= []);
+  const empujar = (arr, o) => { arr.push(o); ultimo = o; return o; };
+  const anexar = t => { if(!ultimo) return false; ultimo.descripcion = ultimo.descripcion ? ultimo.descripcion + "\n" + t : t; return true; };
+  const cambiarSeccion = (s, sb) => { sec = s; sub = sb; grupo = null; arte = false; armaSub = null; ultimo = null; textoKey = null; forma = null; };
+  const esperado = (l, s, sb) => { const e = l.match(/[|(]\s*(\d+)\s*\)?\s*:?\s*$/); if(e && sb && f) f._esperados[s + "." + sb] = parseInt(e[1],10); };
 
-  for(let raw of lineas){
-    let l = quitarBB(raw).replace(/\u00a0/g," ").trim();
+  for(const raw of lineas){
+    let l = raw.replace(/[ \t]+/g, " ").trim();
     if(!l) continue;
     const marcada = /^[▋{]/.test(l);
-    l = l.replace(/^[▋{]\s*/,"").replace(/»\s*$/,"").trim();
-    if(!l) continue;
+    l = l.replace(/^[▋{]\s*/, "").replace(/»\s*$/, "").trim();
+    if(!l || /^(?:\S\s+){3,}\S$/.test(l) && l.split(/\s+/).every(w => w.length <= 1)) continue;  // "H A N A ‧ P A R K"
+    // registro de canjes al final del tema ("Ficha actualizada...", "CANJES:", "1.000 grageas --- ..."): no es parte de la ficha
+    if(/^(ficha actualizada|canjes:?$)/i.test(l) || /^[A-ZÁÉÍÓÚÑ ]+:\s*[\d.,]+\s*grageas\.?$/.test(l)){ ignorar = true; textoKey = null; continue; }
+    if(ignorar && !esNombre(l) && !(!BULLET.test(l) && cabeceraLinea(l, marcada))) continue;
+    ignorar = false;
+    if(/^(?:[•●→-]\s*)?[\d.,]+\s*grageas\s*-{2,}/i.test(l) || /^ficha diseñada/i.test(l)) continue;
     let bullet = BULLET.test(l);
+    const cuerpo0 = l.replace(BULLET, "").trim();
+    const dosp = cuerpo0.indexOf(":");
+    const clave0 = dosp > 0 ? cuerpo0.slice(0, dosp).trim() : cuerpo0;
+    const valor0 = dosp > 0 ? cuerpo0.slice(dosp+1).trim() : "";
+    const claveN = norm(clave0).replace(/\s*\/\s*/g, "/");
 
-    if(!bullet){
-      const cab = cabecera(l);
-      const cabeza = norm(l).split(/[:(|]/)[0].trim();
-      // nombre del personaje
-      if(!marcada && !cab && esMayus(l) && !/:\s*$/.test(l) && !ATRIBUTOS.includes(slug(cabeza)) && l.length <= 60){
-        f = nuevaFicha(l.split(/\s+/).map(cap).join(" ")); fichas.push(f); sec = sub = grupo = null; continue;
-      }
+    // datos personales y textos largos (descripciones, historia, familia)
+    if(dosp > 0 && dosp <= 40 && (claveN in DATOS || claveN in TEXTOS)){
       asegurar();
-      const dosp = l.indexOf(":");
-      const despues0 = dosp > 0 ? sinPunto(l.slice(dosp+1)) : "";
-      const claveCorta = dosp > 0 && dosp <= 45;
-      // "VIGOR: +2" o "Pociones: Competente (+2)" sin viñeta: es un dato, no un encabezado
-      const esValor = claveCorta && despues0 && (parseNivel(despues0) || /^[+-]?\d+$/.test(despues0));
-      if(cab?.sec !== "puntos" && esValor){
-        if(!sec && ATRIBUTOS.includes(slug(cabeza))) sec = "atributos";
-        bullet = true;
-      } else {
-        // grupo de habilidades: "VIGOR (T):"
-        if(!despues0 && ATRIBUTOS.includes(slug(cabeza)) && esMayus(l.split(/[:(]/)[0]) && (!sec || sec === "habilidades" || sec === "atributos")){
-          sec = "habilidades"; grupo = slug(cabeza);
-          if(/\(\s*T\s*\)/i.test(l) && !f.talentosos.includes(grupo)) f.talentosos.push(grupo);
-          continue;
-        }
-        if(cab){
-          const despues = dosp > 0 ? l.slice(dosp+1).trim() : "";
-          if(cab.sec === "puntos"){
-            const clave = /perdida/.test(cab.cabeza) ? "perdida_destino" : cab.cabeza.match(/puntos de (\w+)/)[1];
-            const nums = despues.includes("=") ? despues.split("=").pop().match(/-?\d+/) : despues.match(/-?\d+/);
-            f.puntos[clave] = nums ? parseInt(nums[0],10) : null;
-            continue;
-          }
-          sec = cab.sec; sub = subcategoria(sec, cab.cabeza); grupo = null;
-          const esperado = l.match(/\|\s*(\d+)/);
-          if(esperado && sub) f._esperados[sec + "." + sub] = parseInt(esperado[1],10);
-          if(sec === "atributos"){ const lim = l.match(/L[ií]mites?\s*:\s*([^)]*)\)/i); if(lim && !/^_*$/.test(lim[1].trim())) f.limites = lim[1].trim(); }
-          if(despues && BULLET.test(despues)){ l = despues; bullet = true; }  // "▋ RAZA: → Metamorfomago: ..."
-          else continue;
-        } else if(sec === "titulos"){
-          // las líneas de títulos no llevan viñeta
-        } else if(sec && claveCorta && despues0){
-          bullet = true;  // "Alemán: nivel alto" sin viñeta
-        } else {
-          if(sec && !["atributos","habilidades"].includes(sec) && !/\/.*\(\+\d\)/.test(l)) lista(f.extra, sec).push(l);
-          continue;
-        }
+      if(claveN in DATOS){
+        const v = sinPunto(valor0);
+        if(v && !VACIOS.test(v)) f.datos[DATOS[claveN]] = v;
+        if(DATOS[claveN] === "nombre" && v && !f.personaje) f.personaje = v;
+        textoKey = null;
+      } else { textoKey = TEXTOS[claveN]; f.textos[textoKey] = valor0; }
+      continue;
+    }
+
+    const cab = bullet ? null : cabeceraLinea(l, marcada);
+    if(textoKey && !cab){ f.textos[textoKey] += (f.textos[textoKey] ? "\n" : "") + l; continue; }
+
+    // nombre del personaje: "IRVIN GILES"
+    if(!bullet && !marcada && !cab && esNombre(l) && (sec === null || sec === "habilidades")){
+      if(!f || Object.keys(f.atributos).length || Object.keys(f.bonos).length){ f = nuevaFicha(""); fichas.push(f); }
+      f.personaje = l.split(/\s+/).map(cap).join(" ");
+      cambiarSeccion(null, null);
+      continue;
+    }
+
+    // subcategoría suelta: "BÁSICOS", "INTERMEDIAS:", "ESPECIALES"
+    if(!bullet && !cab && ["hechizos","pociones","rituales","objetos","idiomas","quidditch"].includes(sec)){
+      const t = norm(l).replace(/[:\s]+$/, "");
+      if(/^(domestic|basic|intermedi|avanzad|especial|cumplea|muggle|magic)\w*\s*([|(]\s*\d+\s*\)?)?$/.test(t)){
+        sub = subcategoria(sec, t); ultimo = null; esperado(l, sec, sub);
+        continue;
       }
     }
 
     asegurar();
-    let cuerpo = l.replace(BULLET,"").trim();
-    // subgrupo con viñeta: "• Bibliotecas:", "• Talentos Generales:", "• Carisma:"
-    if(bullet && /:\s*$/.test(cuerpo) && cuerpo.length < 45){
-      const t = sinPunto(cuerpo.replace(/:\s*$/,""));
-      if(sec === "talentos") sub = slug(t.replace(/^talentos?\s+/i,""));
-      else if(sec === "proezas") grupo = slug(t);
-      else grupo = t;
-      continue;
+    // "VIGOR: +2" o "Pociones: Competente (+2)" sin viñeta: es un dato, no un encabezado
+    const esValor = dosp > 0 && dosp <= 45 && valor0 && (parseNivel(valor0) || /^[+-]?\d+\.?$/.test(valor0));
+    if(!bullet){
+      const head = l.replace(/\(\s*T\s*\)/i, "").replace(/\{[^}]*\}/g, "").split(/[:(]/)[0].trim();
+      if(cab?.sec !== "puntos" && esValor){
+        if(!sec && ATRIBUTOS.includes(slug(head))) sec = "atributos";
+        bullet = true;
+      } else if(!valor0 && ATRIBUTOS.includes(slug(head)) && esMayus(head) && (!sec || sec === "habilidades" || sec === "atributos")){
+        // grupo de habilidades: "VIGOR (T):"
+        if(sec !== "habilidades") cambiarSeccion("habilidades", null);
+        grupo = slug(head); arte = false;
+        if(/\(\s*T\s*\)/i.test(l) && !f.talentosos.includes(grupo)) f.talentosos.push(grupo);
+        continue;
+      } else if(cab){
+        const despues = l.includes(":") ? l.slice(l.indexOf(":")+1).trim() : "";
+        if(cab.sec === "puntos"){
+          const clave = /perdida/.test(cab.cabeza) ? "perdida_destino" : cab.cabeza.match(/puntos de (\w+)/)[1];
+          f.puntos[clave] = numeroFinal(despues);
+          continue;
+        }
+        if(cab.sec === "raza" && despues && !BULLET.test(despues)){ cambiarSeccion("raza", null); f.raza = {nombre: sinPunto(despues)}; continue; }
+        cambiarSeccion(cab.sec, subcategoria(cab.sec, cab.cabeza));
+        esperado(l, sec, sub);
+        if(sec === "atributos"){ const lim = l.match(/L[ií]mites?\s*:\s*([^)]*)\)/i); if(lim && !/^_*$/.test(lim[1].trim())) f.limites = lim[1].trim(); }
+        if(despues && BULLET.test(despues)){ l = despues; bullet = true; }  // "▋ RAZA: → Metamorfomago: ..."
+        else continue;
+      } else if(sec === "combate" && !valor0 && esMayus(l) && l.length <= 40){
+        forma = slug(l); continue;   // "HUMANO:", "LICÁNTROPO:"
+      } else if(!valor0 && esMayus(l) && /:\s*$/.test(l) && l.length <= 40 && ["talentos","trasfondos","proezas","objetos","quidditch"].includes(sec)){
+        // subgrupo sin viñeta: "TALENTOS GENERALES:", "BAJOS FONDOS:", "RELIQUIAS:"
+        const t = sinPunto(l.replace(/:\s*$/, ""));
+        if(sec === "talentos") sub = slug(t.replace(/^talentos?\s+/i, ""));
+        else if(sec === "proezas") grupo = slug(t);
+        else if(sec === "trasfondos") grupo = titulo(t);
+        else sub = subcategoria(sec, norm(t)) || slug(t);
+        ultimo = null; esperado(l, sec, sub);
+        continue;
+      } else if(LISTAS.includes(sec)){
+        const empiezaTrasfondo = sec === "trasfondos" && /^(bibliotecas?|influencias?|inform\w*|seguidores)\b/i.test(l);
+        if(empiezaTrasfondo || sec === "titulos") bullet = true;
+        else if(/^[—–-]/.test(l) && ultimo){ anexar(l); continue; }
+        else if(l.split(/\s+/).length < 3 && dosp < 0 && !["talentos","especializaciones","ventajas","raza"].includes(sec)) continue;  // etiquetas sueltas ("Otros")
+        else if(sec === "idiomas" && dosp < 0 && !l.includes("—")){ if(ultimo) anexar(l); continue; }
+        else if(dosp > 0 && dosp <= 45 && valor0) bullet = true;
+        else if(ultimo && (l.length > 80 || dosp === l.length - 1 || !["talentos","especializaciones","idiomas","ventajas","raza"].includes(sec))){ anexar(l); continue; }
+        else if(l.length <= 80) bullet = true;
+        else continue;
+      } else continue;
     }
 
+    let cuerpo = l.replace(BULLET, "").trim();
+    if(!cuerpo || VACIOS.test(sinPunto(cuerpo))) continue;
+    // subgrupo con viñeta: "• Bibliotecas:", "• Talentos Generales:", "• Carisma:", "• COMBATE"
+    const finDosPuntos = /:\s*$/.test(cuerpo) && cuerpo.length < 45 && !CONOCIMIENTOS.includes(sec) &&
+      (sec !== "talentos" || /^talentos?\b/i.test(cuerpo) || esMayus(cuerpo)) && (sec !== "proezas" || ATRIBUTOS.includes(slug(cuerpo.replace(/:\s*$/, ""))));
+    if(finDosPuntos || (esMayus(cuerpo) && cuerpo.length < 30 && !cuerpo.includes(":") && ["talentos","proezas","trasfondos"].includes(sec))){
+      const t = sinPunto(cuerpo.replace(/:\s*$/, ""));
+      if(sec === "habilidades"){
+        if(/arte|artesan/i.test(t)) arte = true;
+        else if(ATRIBUTOS.includes(slug(t))){ grupo = slug(t); arte = false; }
+        continue;
+      }
+      if(sec === "talentos"){ sub = slug(t.replace(/^talentos?\s+/i, "")); ultimo = null; continue; }
+      if(sec === "proezas"){ grupo = slug(t); ultimo = null; continue; }
+      if(sec === "trasfondos" || sec === "otros" || !sec){ grupo = esMayus(t) ? titulo(t) : t; ultimo = null; continue; }
+      if(sec === "idiomas"){ sub = subcategoria("idiomas", norm(t)) || sub; continue; }
+    }
+    // texto largo con viñeta dentro de un objeto o hechizo: es parte de la descripción anterior
+    if(CONOCIMIENTOS.includes(sec) && ultimo && cuerpo.length > 90 && !/^[^:.]{1,100}:/.test(cuerpo) && !/requiere/i.test(cuerpo.slice(0,100))){ anexar(cuerpo); continue; }
+
     const i = cuerpo.indexOf(":");
-    const clave = i > 0 ? cuerpo.slice(0,i).trim() : sinPunto(cuerpo);
+    const clave = i > 0 ? cuerpo.slice(0, i).trim() : sinPunto(cuerpo);
     const valor = i > 0 ? sinPunto(cuerpo.slice(i+1)) : "";
 
     switch(sec || "otros"){
       case "atributos": {
         if(/^l[ií]mites?/i.test(clave)){ f.limites = valor; break; }
-        const ka = slug(clave.replace(/\(\s*T\s*\)/i,""));
+        const ka = slug(clave.replace(/\(\s*T\s*\)/i, ""));
+        if(!ATRIBUTOS.includes(ka)) break;
         if(/\(\s*T\s*\)/i.test(clave) && !f.talentosos.includes(ka)) f.talentosos.push(ka);
-        const n = parseInt(valor.replace(/[^\d-]/g,""),10);
+        const n = parseInt((valor.match(/[+-]?\d+/) || [])[0], 10);
         if(!isNaN(n)) f.atributos[ka] = n;
         break;
       }
       case "habilidades": {
         if(/_{2,}/.test(clave) && /\+0|desentrenado/i.test(valor)) break;
-        const nv = parseNivel(valor);
-        const k = slug(clave.replace(/arte\s*\/\s*artesan[ií]a/i,"artesania"));
+        const nv = parseNivel(valor, true);
+        let k = slug(clave.replace(/arte\s*\/\s*artesan[ií]a/i, "artesania"));
+        let nombre = clave.replace(/\s+/g, " ");
+        if(arte && !HABILIDADES.has(k) && !/arte|artesan/i.test(clave)){ nombre = `Arte / Artesanía (${clave})`; k = "artesania_" + k; }
+        else if(HABILIDADES.has(k)) arte = false;
         const g = grupo || "otras";
         (f.habilidades[g] ||= {});
         if(nv){
-          f.habilidades[g][k] = {nombre: clave.replace(/\s+/g," "), nivel: nv.nivel, bono: nv.bono};
+          f.habilidades[g][k] = {nombre, nivel: nv.nivel, bono: nv.bono};
           f.bonos[k] = nv.bono;
-          if(nv.bono !== nv.esperado) f._avisos.push(`${clave}: ${nv.nivel} figura con +${nv.bono}; en el sistema es +${nv.esperado}.`);
-        } else {
-          f.habilidades[g][k] = {nombre: clave, nivel: valor || null, bono: null};
-          f._avisos.push(`${clave}: no se reconoció el nivel "${valor}".`);
+          if(nv.bono !== nv.esperado) f._avisos.push(`${nombre}: ${nv.nivel} figura con +${nv.bono}; en el sistema es +${nv.esperado}.`);
+        } else if(valor){
+          f.habilidades[g][k] = {nombre, nivel: valor, bono: null};
+          f._avisos.push(`${nombre}: no se reconoció el nivel "${valor}".`);
         }
         break;
       }
       case "combate": {
-        const n = valor.match(/-?\d+/);
-        f.combate[slug(clave)] = n ? parseInt(n[0],10) : valor;
+        // la primera forma ("HUMANO") es el combate principal; las demás ("LICÁNTROPO") van aparte
+        if(forma && !f._formaPrincipal) f._formaPrincipal = forma;
+        const destino = (!forma || forma === f._formaPrincipal) ? f.combate : (f.combate_formas[forma] ||= {});
+        destino[slug(clave)] = numeroFinal(valor);
         break;
       }
-      case "hechizos": case "pociones": case "rituales": case "objetos":
-        lista(f[sec], sub || "otros").push(parseConocimiento(cuerpo)); break;
+      case "hechizos": case "pociones": case "rituales": case "objetos": case "quidditch":
+        empujar(lista(f[sec], sub || "otros"), parseConocimiento(cuerpo)); break;
+      case "armas": {
+        const t = norm(sinPunto(cuerpo));
+        if(/^(caracteristicas|runas)$/.test(t)){ armaSub = t; break; }
+        const o = parseConocimiento(cuerpo), arma = f.armas[f.armas.length - 1];
+        if(armaSub && arma) empujar(arma[armaSub] ||= [], o);
+        else { armaSub = null; empujar(f.armas, o); }
+        break;
+      }
       case "trasfondos":
-        if(grupo && /^ventajas?$/i.test(grupo)) f.ventajas.push(parseVentaja(cuerpo));
-        else f.trasfondos.push(parseTrasfondo(cuerpo, grupo));
+        if(grupo && /^ventajas?$/i.test(grupo)) empujar(f.ventajas, parseVentaja(cuerpo));
+        else empujar(f.trasfondos, parseTrasfondo(cuerpo, grupo));
         break;
-      case "ventajas": f.ventajas.push(parseVentaja(cuerpo)); break;
-      case "raza": f.raza = valor ? {nombre: clave, descripcion: valor} : {nombre: clave}; break;
-      case "idiomas": lista(f.idiomas, sub || "otros").push(parseIdioma(sinPunto(cuerpo))); break;
+      case "ventajas": empujar(f.ventajas, parseVentaja(cuerpo)); break;
+      case "raza": f.raza = valor ? {nombre: clave, descripcion: valor} : {nombre: clave}; ultimo = f.raza; break;
+      case "idiomas": empujar(f.idiomas, parseIdioma(cuerpo, sub)); break;
       case "especializaciones": {
-        const m = sinPunto(cuerpo).match(/^(.+?)\s+(\d+)$/);
-        if(m){ const k = slug(m[1]); f.especializaciones[k] = Math.max(f.especializaciones[k] || 0, parseInt(m[2],10)); }
-        else f.especializaciones[slug(cuerpo)] = f.especializaciones[slug(cuerpo)] || 1;
+        const e = parseEspecializacion(cuerpo);
+        if(e.clave) f.especializaciones[e.clave] = Math.max(f.especializaciones[e.clave] || 0, e.nivel || 1);
         break;
       }
-      case "talentos": lista(f.talentos, sub || "otros").push(parseTalento(cuerpo)); break;
-      case "titulos": f.titulos.push(parseTitulo(cuerpo)); break;
-      case "proezas": {
-        const o = {atributo: grupo || null, habilidad: clave};
-        if(valor) o.descripcion = valor;
-        f.proezas.push(o); break;
-      }
-      default: lista(f.extra, sec || "otros").push(i > 0 ? {nombre: clave, valor} : clave);
+      case "talentos": empujar(lista(f.talentos, sub || "generales"), parseTalento(cuerpo)); break;
+      case "titulos": empujar(f.titulos, parseTitulo(cuerpo)); break;
+      case "proezas": { const hk = slug(clave); const o = {atributo: grupo || HAB_ATR[hk] || (/arte|artesan/i.test(clave) ? "voluntad" : null), habilidad: clave}; if(valor) o.descripcion = valor; empujar(f.proezas, o); break; }
+      default: break;
     }
   }
 
+  if(autor && fichas.length === 1 && !fichas[0].personaje) fichas[0].personaje = autor;
   for(const x of fichas){
+    // solo cuentan los trasfondos generales: los específicos (Biblioteca Medicina > Enfermedades mágicas) son un bonificador, no otro trasfondo
+    const claveT = t => [t.tipo, norm(t.general || ""), t.identidad || ""].join("|");
+    const generales = x.trasfondos.filter(t => !t.especifica);
+    const hay = new Set(generales.map(claveT));
+    for(const t of x.trasfondos) if(t.especifica && !hay.has(claveT(t)))
+      x._avisos.push(`${t.tipo} ${t.general || ""} > ${t.especifica}${t.identidad ? " (" + t.identidad + ")" : ""} es un trasfondo específico sin su general en la ficha; no se copió.`);
+    x.trasfondos = generales;
     const faltan = ATRIBUTOS.filter(a => !(a in x.atributos));
     if(!Object.keys(x.atributos).length) x._avisos.push("No se encontraron atributos.");
     else if(faltan.length) x._avisos.push(`Faltan atributos: ${faltan.join(", ")}.`);
-    if(!x.personaje) x._avisos.push("Sin nombre: poné el nombre en MAYÚSCULAS en la primera línea.");
+    if(!x.personaje) x._avisos.push("Sin nombre: agregá “Nombre y Apellido:” o poné el nombre en MAYÚSCULAS en la primera línea.");
     for(const [k, n] of Object.entries(x._esperados)){
       const [s, sb] = k.split(".");
       const real = (x[s]?.[sb] || []).length;
       if(real !== n) x._avisos.push(`${cap(s)} ${sb}: el encabezado dice ${n} y se leyeron ${real}.`);
     }
   }
-  return fichas;
+  return fichas.filter(x => x.personaje || Object.keys(x.atributos).length || Object.keys(x.bonos).length);
 }
 
 /* ---------- salida ---------- */
-const ORDEN = ["personaje","raza","limites","atributos","talentosos","habilidades","bonos","combate","puntos","especializaciones",
-  "hechizos","pociones","rituales","objetos","talentos","trasfondos","ventajas","idiomas","titulos","proezas","extra"];
+const ORDEN = ["personaje","datos","raza","limites","atributos","talentosos","habilidades","bonos","combate","combate_formas","puntos","especializaciones",
+  "hechizos","pociones","rituales","objetos","armas","quidditch","talentos","trasfondos","ventajas","idiomas","titulos","proezas","textos"];
 const vacio = v => v == null || (Array.isArray(v) ? !v.length : typeof v === "object" && !Object.keys(v).length);
 function limpiar(f){
   const o = {};
@@ -479,7 +703,7 @@ function limpiar(f){
   return o;
 }
 const conDesc = () => $("descripciones").checked;
-const replacer = (k, v) => (k === "descripcion" && !conDesc()) ? undefined : v;
+const replacer = (k, v) => ((k === "descripcion" || k === "textos") && !conDesc()) ? undefined : v;
 
 function resaltar(json){
   return json.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))
@@ -551,7 +775,7 @@ function renderResumen(fichas){
     d.appendChild(at);
     const cuentas = [["Hechizos", contar(f.hechizos)], ["Pociones", contar(f.pociones)], ["Rituales", contar(f.rituales)],
       ["Objetos", contar(f.objetos)], ["Talentos", contar(f.talentos)], ["Trasfondos", (f.trasfondos || []).length],
-      ["Ventajas", (f.ventajas || []).length], ["Idiomas", contar(f.idiomas)], ["Especializaciones", Object.keys(f.especializaciones || {}).length],
+      ["Ventajas", (f.ventajas || []).length], ["Idiomas", (f.idiomas || []).length], ["Armas", (f.armas || []).length], ["Jugadas de Quidditch", contar(f.quidditch)], ["Especializaciones", Object.keys(f.especializaciones || {}).length],
       ["Proezas", (f.proezas || []).length]].filter(([, n]) => n);
     if(cuentas.length){
       const cc = document.createElement("div"); cc.className = "counts";
@@ -587,6 +811,16 @@ $("compacto").addEventListener("change", () => render(ultimasFichas));
 $("descripciones").addEventListener("change", () => render(ultimasFichas));
 $("btn-ejemplo").addEventListener("click", () => { $("entrada").value = EJEMPLO; procesar(); });
 $("btn-limpiar").addEventListener("click", () => { $("entrada").value = ""; procesar(); $("entrada").focus(); });
+$("btn-archivo").addEventListener("click", () => $("archivo").click());
+$("archivo").addEventListener("change", e => {
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const lector = new FileReader();
+  lector.onload = () => { $("entrada").value = String(lector.result || ""); procesar(); toast("Archivo cargado: " + file.name); };
+  lector.onerror = () => toast("No se pudo leer el archivo");
+  lector.readAsText(file);
+  e.target.value = "";
+});
 
 function tab(cual){
   tabActual = cual;
